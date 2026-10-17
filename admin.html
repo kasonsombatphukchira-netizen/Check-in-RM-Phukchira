@@ -4,17 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Check-In Admin</title>
-<link rel="icon" href="icons/icon-192.png">
-<meta name="theme-color" content="#0f766e">
+<link rel="icon" href="icons/logo.svg" type="image/svg+xml">
+<meta name="theme-color" content="#0B2E7A">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="bar"><div class="brand">✓ <span data-appname>Check-In</span> · <span id="whoami">หัวหน้า</span></div><button id="btnLogout" class="link hidden">ออกจากระบบ</button></header>
+<header class="bar"><div class="brand"><img src="icons/logo.svg" alt=""><span data-appname>Check-In</span> · <span id="whoami">หัวหน้า</span></div><button id="btnLogout" class="link hidden">ออกจากระบบ</button></header>
 <main class="wrap wide">
 
   <section id="scLoading" class="card center"><div class="spinner"></div><p class="muted">กำลังโหลด...</p></section>
 
   <section id="scLogin" class="card hidden" style="max-width:420px;margin:0 auto">
+    <div class="hero"><img src="icons/logo.svg" alt=""><div class="t" data-appname>AM Check-In</div><div class="s">สำหรับหัวหน้า / ผู้ดูแลระบบ</div><div class="dots"><i></i><i></i><i></i></div></div>
     <h2>เข้าสู่ระบบผู้ดูแล</h2>
     <label>อีเมล<input id="liEmail" type="email" autocomplete="username"></label>
     <label>รหัสผ่าน<input id="liPw" type="password" autocomplete="current-password"></label>
@@ -32,7 +33,7 @@
       <button data-t="users">พนักงาน</button>
       <button data-t="branches">สาขา</button>
       <button data-t="zones" class="rm-only">เขต (RM)</button>
-      <button data-t="tools" class="rm-only">ตั้งค่า/ดูแลระบบ</button>
+      <button data-t="tools">ตั้งค่า/ดูแลระบบ</button>
     </nav>
 
     <!-- รายงาน -->
@@ -158,9 +159,9 @@
         </div>
         <p class="msg" id="bMsg"></p>
       </div>
-      <div class="card rm-only">
+      <div class="card">
         <h3>นำเข้าหลายสาขา</h3>
-        <p class="muted">1 สาขาต่อ 1 บรรทัด: <b>รหัสสาขา, ชื่อสาขา, latitude, longitude, รัศมี, รหัสเขต</b> (เว้นพิกัดว่างไว้ได้ แล้วมาเติมทีหลัง · คัดลอกจาก Excel มาวางได้)</p>
+        <p class="muted">1 สาขาต่อ 1 บรรทัด: <b>รหัสสาขา, ชื่อสาขา, latitude, longitude, รัศมี, รหัสเขต</b> (เว้นพิกัดว่างไว้ได้ แล้วมาเติมทีหลัง · คัดลอกจาก Excel มาวางได้ · AM ไม่ต้องใส่รหัสเขต ระบบใส่เขตของคุณให้)</p>
         <textarea id="bBulk"></textarea>
         <div class="row" style="max-width:420px">
           <button id="btnBBulk" class="btn primary">นำเข้า</button>

@@ -50,7 +50,7 @@ onAuthStateChanged(auth, async (user) => {
     $("rFrom").value = today; $("rTo").value = today;
     $("aMonth").value = today.slice(0, 7); $("aGrace").textContent = LATE_GRACE_MIN;
     runReport();
-  } catch (e) { screen("scLogin"); msg("liMsg", errText(e)); }
+  } catch (e) { screen("scLogin"); msg("liMsg", e && e.code === "permission-denied" ? "ล็อกอินได้แต่ฐานข้อมูลปฏิเสธการอ่าน — ตรวจว่าวาง Rules ล่าสุดใน Firebase และกด Publish แล้ว" : errText(e)); }
 });
 $("btnLogin").onclick = async () => {
   busy($("btnLogin"), true);
@@ -661,7 +661,8 @@ $("btnAttCsvDay").onclick = () => {
 
 /* ================= เขต (RM) ================= */
 async function loadZones() {
-  zones = (await getDocs(collection(db, "zones"))).docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.id.localeCompare(b.id));
+  try { zones = (await getDocs(collection(db, "zones"))).docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.id.localeCompare(b.id)); }
+  catch (e) { zones = []; console.warn("อ่านข้อมูลเขตไม่ได้ — ตรวจว่า Publish Rules ล่าสุดแล้ว", e); }
   const opts = zones.map((z) => `<option value="${esc(z.id)}">${esc(z.name || z.id)}</option>`).join("");
   $("rZone").innerHTML = `<option value="">ทุกเขต</option>` + opts;
   $("aZone").innerHTML = `<option value="">ทุกเขต</option>` + opts;

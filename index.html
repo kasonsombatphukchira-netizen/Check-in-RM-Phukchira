@@ -6,14 +6,14 @@
 <title>Check-In</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/logo.svg" type="image/svg+xml">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Check-In">
-<meta name="theme-color" content="#0f766e">
+<meta name="theme-color" content="#0B2E7A">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="bar"><div class="brand">✓ <span data-appname>Check-In</span></div><button id="btnLogout" class="link hidden">ออกจากระบบ</button></header>
+<header class="bar"><div class="brand"><img src="icons/logo.svg" alt=""><span data-appname>Check-In</span></div><button id="btnLogout" class="link hidden">ออกจากระบบ</button></header>
 <main class="wrap">
 
   <section id="scInApp" class="card hidden">
@@ -27,6 +27,7 @@
   <section id="scLoading" class="card center"><div class="spinner"></div><p class="muted">กำลังโหลด...</p></section>
 
   <section id="scLogin" class="card hidden">
+    <div class="hero"><img src="icons/logo.svg" alt=""><div class="t" data-appname>AM Check-In</div><div class="s">ลงเวลาเข้า-ออกงาน · GPS + เซลฟี่</div><div class="dots"><i></i><i></i><i></i></div></div>
     <h2>เข้าสู่ระบบ</h2>
     <label>อีเมล<input id="liEmail" type="email" autocomplete="username" inputmode="email" autocapitalize="off"></label>
     <label>รหัสผ่าน<input id="liPw" type="password" autocomplete="current-password"></label>
