@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Check-In</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Check-In">
+<meta name="theme-color" content="#0f766e">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="bar"><div class="brand">✓ <span data-appname>Check-In</span></div><button id="btnLogout" class="link hidden">ออกจากระบบ</button></header>
+<main class="wrap">
+
+  <section id="scInApp" class="card hidden">
+    <h2>⚠️ กรุณาเปิดด้วย Safari หรือ Chrome</h2>
+    <p>ระบบไม่รองรับการเปิดในแอป LINE / Facebook เพราะใช้กล้องและตำแหน่งไม่ได้</p>
+    <p>กด <b>⋯</b> มุมขวาบน → <b>เปิดในเบราว์เซอร์</b></p>
+    <button id="btnCopyLink" class="btn block">คัดลอกลิงก์</button>
+    <p class="msg ok" id="copyMsg"></p>
+  </section>
+
+  <section id="scLoading" class="card center"><div class="spinner"></div><p class="muted">กำลังโหลด...</p></section>
+
+  <section id="scLogin" class="card hidden">
+    <h2>เข้าสู่ระบบ</h2>
+    <label>อีเมล<input id="liEmail" type="email" autocomplete="username" inputmode="email" autocapitalize="off"></label>
+    <label>รหัสผ่าน<input id="liPw" type="password" autocomplete="current-password"></label>
+    <div class="row"><button id="btnLogin" class="btn primary">เข้าสู่ระบบ</button></div>
+    <button id="btnForgot" class="link">ลืมรหัสผ่าน</button>
+    <p class="msg" id="liMsg"></p>
+  </section>
+
+  <section id="scChangePw" class="card hidden">
+    <h2>ตั้งรหัสผ่านใหม่</h2>
+    <p class="muted">เข้าใช้งานครั้งแรก กรุณาตั้งรหัสผ่านของตัวเอง (อย่างน้อย 6 ตัว)</p>
+    <label>รหัสผ่านใหม่<input id="cpPw1" type="password" autocomplete="new-password"></label>
+    <label>ยืนยันรหัสผ่านใหม่<input id="cpPw2" type="password" autocomplete="new-password"></label>
+    <div class="row"><button id="btnChangePw" class="btn primary">บันทึก</button></div>
+    <p class="msg" id="cpMsg"></p>
+  </section>
+
+  <section id="scDevice" class="card hidden">
+    <h2>📱 รอหัวหน้าอนุมัติเครื่อง</h2>
+    <p id="devText"></p>
+    <p class="muted">เมื่อหัวหน้าอนุมัติแล้ว กด "ตรวจสอบอีกครั้ง"</p>
+    <div class="row"><button id="btnDevRecheck" class="btn">ตรวจสอบอีกครั้ง</button></div>
+  </section>
+
+  <section id="scBlocked" class="card hidden"><h2>ไม่สามารถใช้งานได้</h2><p id="blkText"></p></section>
+
+  <section id="scMain" class="hidden">
+    <div class="card">
+      <div class="who">
+        <div><div id="mName" class="big"></div><div id="mPos" class="muted"></div></div>
+      </div>
+      <div id="mDate" class="muted" style="margin-top:4px"></div>
+      <div id="mShift" class="loc wait hidden" style="margin-top:8px"></div>
+      <div class="seg" id="segType"><button data-v="in" class="on">เข้างาน</button><button data-v="out">ออกงาน</button></div>
+      <label>สาขา<select id="mBranch"></select></label>
+      <div id="locBox" class="loc wait">📍 กำลังหาตำแหน่ง...</div>
+      <label class="chk"><input type="checkbox" id="mOff"> ทำงานนอกสถานที่ (ไม่ได้อยู่ที่สาขา)</label>
+      <label>หมายเหตุ <span id="noteReq">(ไม่บังคับ)</span>
+        <textarea id="mNote" maxlength="300" style="min-height:64px" placeholder="เช่น ประชุมที่ HUB บางนา / ดูงานอีเวนต์ที่... / ลืมกดออกงาน ออกจริง 17:10"></textarea></label>
+    </div>
+
+    <div class="card">
+      <div id="gesture" class="gesture hidden"></div>
+      <div class="cam">
+        <video id="video" playsinline muted autoplay class="hidden"></video>
+        <img id="shot" class="hidden" alt="เซลฟี่">
+        <div id="camPh" class="ph">📷<br>กด "เปิดกล้อง" เพื่อถ่ายเซลฟี่</div>
+      </div>
+      <div class="row">
+        <button id="btnCam" class="btn">เปิดกล้อง</button>
+        <button id="btnShoot" class="btn primary hidden">ถ่ายรูป</button>
+        <button id="btnRetake" class="btn hidden">ถ่ายใหม่</button>
+      </div>
+    </div>
+
+    <button id="btnSubmit" class="btn primary block" disabled>ยืนยันเข้างาน</button>
+    <p class="msg" id="mMsg"></p>
+    <p class="muted center">เวลาเข้า-ออกงานบันทึกจากเวลาเซิร์ฟเวอร์</p>
+
+    <div class="card"><h3>รายการวันนี้</h3><ul id="today" class="list"><li class="muted">ยังไม่มีรายการ</li></ul></div>
+  </section>
+</main>
+
+<div id="done" class="overlay hidden"><div class="okcard"><div class="tick">✓</div><div class="big">สำเร็จ</div><div id="doneText" class="muted"></div><button id="btnDone" class="btn primary">ตกลง</button></div></div>
+<canvas id="canvas" class="hidden"></canvas>
+<script type="module" src="app.js"></script>
+</body>
+</html>

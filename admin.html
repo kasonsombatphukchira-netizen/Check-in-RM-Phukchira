@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Check-In Admin</title>
+<link rel="icon" href="icons/icon-192.png">
+<meta name="theme-color" content="#0f766e">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="bar"><div class="brand">✓ <span data-appname>Check-In</span> · <span id="whoami">หัวหน้า</span></div><button id="btnLogout" class="link hidden">ออกจากระบบ</button></header>
+<main class="wrap wide">
+
+  <section id="scLoading" class="card center"><div class="spinner"></div><p class="muted">กำลังโหลด...</p></section>
+
+  <section id="scLogin" class="card hidden" style="max-width:420px;margin:0 auto">
+    <h2>เข้าสู่ระบบผู้ดูแล</h2>
+    <label>อีเมล<input id="liEmail" type="email" autocomplete="username"></label>
+    <label>รหัสผ่าน<input id="liPw" type="password" autocomplete="current-password"></label>
+    <div class="row"><button id="btnLogin" class="btn primary">เข้าสู่ระบบ</button></div>
+    <p class="msg" id="liMsg"></p>
+  </section>
+
+  <section id="scDenied" class="card hidden"><h2>ไม่มีสิทธิ์เข้าหน้านี้</h2><p class="muted">บัญชีนี้ไม่ใช่ผู้ดูแลระบบ</p></section>
+
+  <section id="scPanel" class="hidden">
+    <nav class="tabs" id="tabs">
+      <button data-t="report" class="on">รายงานเข้า-ออก</button>
+      <button data-t="shifts">กะ &amp; มาสาย/ขาด</button>
+      <button data-t="devices">คำขอเปลี่ยนเครื่อง <span id="devBadge" class="badge hidden">0</span></button>
+      <button data-t="users">พนักงาน</button>
+      <button data-t="branches">สาขา</button>
+      <button data-t="zones" class="rm-only">เขต (RM)</button>
+      <button data-t="tools" class="rm-only">ตั้งค่า/ดูแลระบบ</button>
+    </nav>
+
+    <!-- รายงาน -->
+    <div id="t-report">
+      <div class="card">
+        <div class="grid">
+          <label>ตั้งแต่วันที่<input id="rFrom" type="date"></label>
+          <label>ถึงวันที่<input id="rTo" type="date"></label>
+          <label class="rm-only">เขต<select id="rZone"></select></label>
+          <label>สาขา<select id="rBranch"></select></label>
+          <label>ประเภท<select id="rType"><option value="">ทั้งหมด</option><option value="in">เข้างาน</option><option value="out">ออกงาน</option></select></label>
+          <label>ค้นหาชื่อ/รหัส<input id="rSearch" placeholder="พิมพ์ชื่อหรือรหัสพนักงาน"></label>
+        </div>
+        <div class="row" style="max-width:520px">
+          <button id="btnReport" class="btn primary">ดูรายงาน</button>
+          <button id="btnCsvSum" class="btn">Export สรุปรายคน (CSV)</button>
+          <button id="btnCsvRaw" class="btn">Export ทุกรายการ (CSV)</button>
+        </div>
+        <p class="msg" id="rMsg"></p>
+      </div>
+      <div class="stats" id="rStats"></div>
+      <div class="card"><h3>สรุปรายคนรายวัน</h3><div class="tbl-wrap"><table id="tSum"></table></div></div>
+      <div class="card"><h3>ทุกรายการ</h3><div class="tbl-wrap"><table id="tRaw"></table></div></div>
+    </div>
+
+    <!-- กะ & มาสาย -->
+    <div id="t-shifts" class="hidden">
+      <div class="card">
+        <div class="grid">
+          <label>เดือน<input id="aMonth" type="month"></label>
+          <label>นับตั้งแต่วันที่ (วันเริ่มใช้ระบบ)<input id="aStart" type="date"></label>
+          <label class="rm-only">เขต<select id="aZone"></select></label>
+          <label>สาขา<select id="aBranch"></select></label>
+          <label>แสดงรายวัน<select id="aShow"><option value="issues">เฉพาะที่ผิดปกติ</option><option value="all">ทุกวัน</option></select></label>
+          <label>ค้นหาชื่อ<input id="aSearch" placeholder="ชื่อ / ชื่อเล่น"></label>
+        </div>
+        <div class="row" style="max-width:620px">
+          <button id="btnAtt" class="btn primary">คำนวณ</button>
+          <button id="btnAttCsvSum" class="btn">Export สรุปรายคน</button>
+          <button id="btnAttCsvDay" class="btn">Export รายวัน</button>
+        </div>
+        <p class="muted">มาสาย = เช็กอินช้ากว่าเวลาเริ่มกะเกิน <b id="aGrace"></b> นาที · ขาดงาน = มีกะแต่ไม่มีการเช็กอินเข้างาน · จับคู่พนักงานกับตารางกะด้วยเบอร์โทร</p>
+        <p class="msg" id="aMsg"></p>
+      </div>
+      <div class="stats" id="aStats"></div>
+      <div class="card rm-only"><h3>สรุปตามเขต</h3><div class="tbl-wrap"><table id="tAttZone"></table></div></div>
+      <div class="card"><h3>สรุปรายคน</h3><div class="tbl-wrap"><table id="tAttSum"></table></div></div>
+      <div class="card"><h3>รายละเอียดรายวัน</h3><div class="tbl-wrap"><table id="tAttDay"></table></div></div>
+      <div class="card">
+        <h3>อัปโหลดตารางกะ (Excel)</h3>
+        <p class="muted">ใช้ไฟล์รูปแบบเดียวกับ "ตารางกะ_Oct 2026" (หัวตาราง Store / ชื่อ / นามสกุล / ชื่อเล่น / ตำแหน่ง / เบอร์โทร / วันที่) — อัปโหลดซ้ำได้ ระบบจะเขียนทับเดือนเดิม</p>
+        <input id="sFile" type="file" accept=".xlsx,.xls">
+        <p class="msg" id="sMsg"></p>
+        <div class="tbl-wrap"><table id="tShiftPrev"></table></div>
+        <div class="row" style="max-width:260px"><button id="btnSSave" class="btn primary hidden">บันทึกตารางกะ</button></div>
+      </div>
+    </div>
+
+    <!-- คำขอเปลี่ยนเครื่อง -->
+    <div id="t-devices" class="hidden">
+      <div class="card">
+        <h3>คำขอเปลี่ยนเครื่อง / ใช้คอมพิวเตอร์</h3>
+        <p class="muted">อนุมัติแล้ว เครื่องเดิมจะใช้ไม่ได้ทันที (1 คน ใช้ได้ 1 เครื่อง)</p>
+        <div class="tbl-wrap"><table id="tDev"></table></div>
+        <div class="row" style="max-width:220px"><button id="btnDevReload" class="btn sm">รีเฟรช</button></div>
+      </div>
+    </div>
+
+    <!-- พนักงาน -->
+    <div id="t-users" class="hidden">
+      <div class="card">
+        <h3 id="uFormTitle">เพิ่มพนักงาน</h3>
+        <div class="grid">
+          <label>ชื่อ-นามสกุล<input id="uName"></label>
+          <label>รหัสพนักงาน<input id="uEmp"></label>
+          <label>อีเมลส่วนตัว<input id="uEmail" type="email" autocapitalize="off"></label>
+          <label>รหัสผ่านเริ่มต้น<input id="uPw" placeholder="อย่างน้อย 6 ตัว"></label>
+          <label>ตำแหน่ง<input id="uPos" placeholder="เช่น เจ้าหน้าที่พื้นที่เช่า"></label>
+          <label>เบอร์โทร (ใช้จับคู่ตารางกะ)<input id="uPhone" inputmode="tel" placeholder="08x-xxx-xxxx"></label>
+          <label>ชื่อเล่น<input id="uNick"></label>
+          <label>สาขาประจำ<select id="uBranch"></select></label>
+          <label class="rm-only">สิทธิ์<select id="uRole"><option value="staff">พนักงาน</option><option value="am">AM (ดูแลได้เฉพาะเขตตัวเอง)</option><option value="rm">RM / RL (สิทธิ์สูงสุด)</option></select></label>
+          <label class="rm-only">เขต<select id="uZone"></select></label>
+        </div>
+        <div class="row" style="max-width:420px">
+          <button id="btnUSave" class="btn primary">เพิ่มพนักงาน</button>
+          <button id="btnUCancel" class="btn hidden">ยกเลิกแก้ไข</button>
+          <button id="btnUGen" class="btn">สุ่มรหัสผ่าน</button>
+        </div>
+        <p class="msg" id="uMsg"></p>
+      </div>
+      <div class="card">
+        <h3>เพิ่มหลายคนพร้อมกัน</h3>
+        <p class="muted">คัดลอกแถวจาก Excel มาวางได้เลย หรือพิมพ์คั่นด้วยจุลภาค <b>,</b> (ห้ามใช้จุด) 1 คนต่อ 1 บรรทัด: <b>ชื่อ-นามสกุล | รหัสพนักงาน | อีเมล | ตำแหน่ง | รหัสสาขา | เบอร์โทร | ชื่อเล่น</b> — ทุกคนใช้รหัสผ่านเริ่มต้นเดียวกันด้านล่าง (ถ้าอีเมลซ้ำกับที่มีอยู่ ระบบจะข้าม)</p>
+        <textarea id="uBulk" placeholder="สมชาย ใจดี, 40112233, somchai@lotuss.com, Mall Operation Manager, 5175, 081-234-5678, ชาย"></textarea>
+        <label>รหัสผ่านเริ่มต้น (ทุกคน)<input id="uBulkPw" placeholder="อย่างน้อย 6 ตัว"></label>
+        <div class="row" style="max-width:220px"><button id="btnUBulk" class="btn primary">นำเข้า</button></div>
+        <p class="msg" id="uBulkMsg"></p>
+      </div>
+      <div class="card">
+        <h3>รายชื่อพนักงาน (<span id="uCount">0</span>)</h3>
+        <div class="tbl-wrap"><table id="tUsers"></table></div>
+      </div>
+    </div>
+
+    <!-- สาขา -->
+    <div id="t-branches" class="hidden">
+      <div class="card">
+        <h3 id="bFormTitle">เพิ่ม/แก้ไขสาขา</h3>
+        <div class="grid">
+          <label>รหัสสาขา<input id="bCode" placeholder="เช่น 5175"></label>
+          <label>ชื่อสาขา<input id="bName"></label>
+          <label>Latitude<input id="bLat" inputmode="decimal" placeholder="13.xxxxxx"></label>
+          <label>Longitude<input id="bLng" inputmode="decimal" placeholder="100.xxxxxx"></label>
+          <label>รัศมี (เมตร)<input id="bRad" inputmode="numeric"></label>
+          <label class="rm-only">เขต<select id="bZone"></select></label>
+        </div>
+        <p class="muted">เคล็ดลับ: เปิด Google Maps → กดค้างที่ตัวอาคารสาขา → คัดลอกตัวเลข เช่น <code>13.912345, 100.512345</code> แล้ววางลงช่อง Latitude ได้เลย (ระบบแยกให้อัตโนมัติ) หรือยืนที่สาขาแล้วกด "ใช้ตำแหน่งปัจจุบัน"</p>
+        <div class="row" style="max-width:560px">
+          <button id="btnBSave" class="btn primary">บันทึกสาขา</button>
+          <button id="btnBHere" class="btn">ใช้ตำแหน่งปัจจุบัน</button>
+          <button id="btnBClear" class="btn">ล้างฟอร์ม</button>
+        </div>
+        <p class="msg" id="bMsg"></p>
+      </div>
+      <div class="card rm-only">
+        <h3>นำเข้าหลายสาขา</h3>
+        <p class="muted">1 สาขาต่อ 1 บรรทัด: <b>รหัสสาขา, ชื่อสาขา, latitude, longitude, รัศมี, รหัสเขต</b> (เว้นพิกัดว่างไว้ได้ แล้วมาเติมทีหลัง · คัดลอกจาก Excel มาวางได้)</p>
+        <textarea id="bBulk"></textarea>
+        <div class="row" style="max-width:420px">
+          <button id="btnBBulk" class="btn primary">นำเข้า</button>
+        </div>
+        <p class="msg" id="bBulkMsg"></p>
+      </div>
+      <div class="card">
+        <h3>รายการสาขา (<span id="bCount">0</span>)</h3>
+        <div class="tbl-wrap"><table id="tBranches"></table></div>
+      </div>
+    </div>
+
+    <!-- เขต (RM) -->
+    <div id="t-zones" class="hidden">
+      <div class="card">
+        <h3>เพิ่ม/แก้ไขเขต</h3>
+        <div class="grid">
+          <label>รหัสเขต (ภาษาอังกฤษ/ตัวเลข)<input id="zId" placeholder="เช่น AM1"></label>
+          <label>ชื่อเขต<input id="zName" placeholder="เช่น AM East"></label>
+        </div>
+        <div class="row" style="max-width:420px"><button id="btnZSave" class="btn primary">บันทึกเขต</button><button id="btnZClear" class="btn">ล้างฟอร์ม</button></div>
+        <p class="muted">ขั้นตอน: 1) สร้างเขต → 2) แท็บสาขา: กำหนดเขตให้ทุกสาขา → 3) แท็บพนักงาน: สร้างบัญชี AM (Gmail) เลือกสิทธิ์ AM + เขต → 4) กด "อัปเดตเขตให้ข้อมูลเดิม" ด้านล่าง</p>
+        <p class="msg" id="zMsg"></p>
+      </div>
+      <div class="card"><h3>รายการเขต</h3><div class="tbl-wrap"><table id="tZones"></table></div></div>
+      <div class="card">
+        <h3>อัปเดตเขตให้ข้อมูลเดิม</h3>
+        <p class="muted">ใช้หลังกำหนด/ย้ายเขตของสาขา — ระบบจะใส่เขตให้พนักงาน ตารางกะ และประวัติเช็กอินตามสาขาประจำ เพื่อให้ AM แต่ละเขตเห็นข้อมูลของตัวเอง</p>
+        <div class="row" style="max-width:300px"><button id="btnBackfill" class="btn">อัปเดตเขตให้ข้อมูลเดิม</button></div>
+        <p class="msg" id="bfMsg"></p>
+      </div>
+    </div>
+
+    <!-- ดูแลระบบ -->
+    <div id="t-tools" class="hidden">
+      <div class="card">
+        <h3>ลบรูปเซลฟี่เก่า (ประหยัดพื้นที่ฐานข้อมูล)</h3>
+        <p class="muted">ลบเฉพาะรูป ข้อมูลเวลาเข้า-ออกยังอยู่ครบ — แนะนำทำทุก 2–3 เดือน</p>
+        <label style="max-width:240px">ลบรูปที่เก่ากว่า (วัน)<input id="pDays" type="number" value="90" min="7"></label>
+        <div class="row" style="max-width:220px"><button id="btnPurge" class="btn danger">ลบรูปเก่า</button></div>
+        <p class="msg" id="pMsg"></p>
+      </div>
+      <div class="card">
+        <h3>ลิงก์สำหรับพนักงาน</h3>
+        <p><code id="staffLink"></code></p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="photoModal" class="overlay hidden"><div style="text-align:center"><img id="photoBig" class="photo-big" alt=""><p id="photoCap" style="color:#fff"></p><button class="btn" id="btnPhotoClose">ปิด</button></div></div>
+<script type="module" src="admin.js"></script>
+</body>
+</html>

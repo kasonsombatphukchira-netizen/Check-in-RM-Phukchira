@@ -1,0 +1,121 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ผู้ดูแลระบบหลัก (สิทธิ์ RM เสมอ) — ต้องตรงกับ OWNER_EMAILS ใน firebase-config.js
+    function ownerEmails() { return ['kasonsombatphukchira@gmail.com', 'kanlys.2541@gmail.com']; }
+
+    // ---------- สิทธิ์ ----------
+    // rm (หรือ admin เดิม) = RM / RL : สิทธิ์สูงสุด เห็นทุกเขต
+    // am = AM : จัดการได้เฉพาะเขตของตัวเอง (zoneId)
+    // staff = พนักงาน
+    function signedIn() { return request.auth != null; }
+    function isOwner() {
+      return signedIn() && request.auth.token.email != null
+        && request.auth.token.email.lower() in ownerEmails();
+    }
+    function myUser() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function hasUser() { return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function myRole() { return myUser().data.get('role', 'staff'); }
+    function myZone() { return myUser().data.get('zoneId', ''); }
+    function isActive() { return myUser().data.get('active', true) == true; }
+    function isRM() { return isOwner() || (hasUser() && myRole() in ['rm', 'admin'] && isActive()); }
+    function isAM() { return hasUser() && myRole() == 'am' && myZone() != '' && isActive(); }
+    function amOf(z) { return isAM() && z == myZone(); }
+
+    // ---------- เขต ----------
+    match /zones/{zoneId} {
+      allow read: if signedIn();
+      allow write: if isRM();
+    }
+
+    // ---------- สาขา ----------
+    match /branches/{branchId} {
+      allow read: if signedIn();
+      allow create, delete: if isRM();
+      allow update: if isRM() || (amOf(resource.data.get('zoneId', ''))
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lat', 'lng', 'radius']));
+    }
+
+    // ---------- ผู้ใช้ ----------
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isRM() || amOf(resource.data.zoneId));
+      allow create: if isRM() || (amOf(request.resource.data.get('zoneId', '')) && request.resource.data.get('role', '') == 'staff');
+      allow update: if isRM()
+        || (amOf(resource.data.get('zoneId', '')) && resource.data.get('role', 'staff') == 'staff'
+            && request.resource.data.get('role', 'staff') == 'staff' && request.resource.data.get('zoneId', '') == myZone())
+        || (signedIn() && request.auth.uid == uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['mustChangePassword', 'deviceId'])
+            && request.resource.data.get('mustChangePassword', false) == false
+            && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['deviceId'])
+                || resource.data.get('deviceId', '') == ''));
+      allow delete: if isRM();
+    }
+
+    // ---------- คำขอเปลี่ยนเครื่อง ----------
+    match /deviceRequests/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isRM() || amOf(resource.data.zoneId));
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['deviceId', 'ua', 'name', 'email', 'mobile', 'zoneId', 'at'])
+        && request.resource.data.at == request.time
+        && request.resource.data.get('zoneId', '') == myUser().data.get('zoneId', '');
+      allow delete: if isRM() || amOf(resource.data.get('zoneId', ''));
+    }
+
+    // ---------- บันทึกเข้า-ออกงาน ----------
+    match /checkins/{id} {
+      allow read: if signedIn() && (resource.data.uid == request.auth.uid || isRM() || amOf(resource.data.zoneId));
+      allow create: if signedIn() && validCheckin(request.resource.data)
+        && existsAfter(/databases/$(database)/documents/checkinPhotos/$(id));   // ต้องมีเซลฟี่คู่กัน
+      allow update: if isRM() || (amOf(resource.data.get('zoneId', ''))
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reviewed']));
+      allow delete: if isRM();   // พนักงานแก้/ลบย้อนหลังไม่ได้
+    }
+
+    // ---------- รูปเซลฟี่ ----------
+    match /checkinPhotos/{id} {
+      allow read: if signedIn() && (resource.data.uid == request.auth.uid || isRM()
+        || amOf(get(/databases/$(database)/documents/checkins/$(id)).data.get('zoneId', '')));
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid
+        && request.resource.data.ts == request.time
+        && request.resource.data.photo is string && request.resource.data.photo.size() < 300000
+        && existsAfter(/databases/$(database)/documents/checkins/$(id));
+      allow update, delete: if isRM();
+    }
+
+    // ---------- ตารางกะ ----------
+    match /shifts/{id} {
+      allow read: if signedIn() && (resource.data.phoneKey == myUser().data.get('phoneKey', '-')
+        || isRM() || amOf(resource.data.zoneId));
+      allow create: if isRM() || amOf(request.resource.data.get('zoneId', ''));
+      allow update: if isRM() || (amOf(request.resource.data.get('zoneId', '')) && amOf(resource.data.get('zoneId', '')));
+      allow delete: if isRM();
+    }
+
+    function validCheckin(d) {
+      let u = myUser().data;
+      let b = get(/databases/$(database)/documents/branches/$(d.branchId)).data;
+      let r = b.get('radius', 200) + 50;   // เผื่อความคลาดเคลื่อน GPS 50 ม.
+      return d.uid == request.auth.uid
+        && d.ts == request.time                       // เวลาเซิร์ฟเวอร์เท่านั้น
+        && d.type in ['in', 'out']
+        && u.get('active', true) == true
+        && u.get('mustChangePassword', false) == false
+        && u.get('deviceId', '') != ''
+        && d.deviceId == u.deviceId                   // 1 เครื่อง 1 คน
+        && d.get('zoneId', '') == b.get('zoneId', '') // เขตตามสาขา
+        && d.lat is number && d.lng is number
+        && b.lat is number && b.lng is number
+        && d.get('note', '') is string && d.get('note', '').size() <= 300
+        && !('photo' in d)
+        && (
+          // นอกสถานที่: ต้องมีหมายเหตุ (บันทึกพิกัดจริงไว้ให้หัวหน้าตรวจ)
+          (d.get('offsite', false) == true && d.note.size() >= 5)
+          // ปกติ: ต้องอยู่ในพื้นที่สาขา
+          || (d.get('offsite', false) == false
+              && math.abs(d.lat - b.lat) * 111320 <= r
+              && math.abs(d.lng - b.lng) * 108000 <= r)
+        );
+    }
+  }
+}
