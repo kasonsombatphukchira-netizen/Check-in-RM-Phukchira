@@ -1,5 +1,7 @@
 import { auth, db, $, fmtTime, fmtDateTime, bkkDay, errText, esc, busy, phoneKey, normCode, shiftInfo, shiftWindow, LATE_GRACE_MIN } from "./common.js";
 import { firebaseConfig, OWNER_EMAILS, DEFAULT_RADIUS } from "./firebase-config.js";
+import * as CFG from "./firebase-config.js";
+const MULTI_ZONE = CFG.MULTI_ZONE !== false; // false = ใช้คนเดียว ไม่แบ่งเขต
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, startAfter, writeBatch, Timestamp, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -37,10 +39,11 @@ onAuthStateChanged(auth, async (user) => {
     me = { uid: user.uid, role: p.role || "", zoneId: p.zoneId || "", owner: isOwner, name: p.name || user.email };
     const allowed = isRM() || (me.role === "am" && me.zoneId && p.active !== false);
     if (!allowed) { $("scDenied").querySelector("p").textContent = me.role === "am" ? "บัญชี AM นี้ยังไม่ได้กำหนดเขต — ติดต่อ RM" : "บัญชีนี้ไม่ใช่ผู้ดูแลระบบ"; return screen("scDenied"); }
-    document.querySelectorAll(".rm-only").forEach((el) => el.classList.toggle("hidden", !isRM()));
+    document.querySelectorAll(".rm-only").forEach((el) => el.classList.toggle("hidden", !isRM() || !MULTI_ZONE));
+    if (!MULTI_ZONE) document.querySelectorAll("#uRole option[value=am]").forEach((o) => o.remove());
     screen("scPanel");
     await loadZones();
-    $("whoami").textContent = isRM() ? "RM / RL" : `AM · ${zName(me.zoneId)}`;
+    $("whoami").textContent = !MULTI_ZONE ? "ผู้ดูแล" : isRM() ? "RM / RL" : `AM · ${zName(me.zoneId)}`;
     $("staffLink").textContent = new URL("./", location.href).href;
     await loadBranches();
     await loadUsers();
@@ -186,7 +189,7 @@ async function loadUsers() {
       <td>${esc(u.name)}</td><td>${esc(u.nickname)}</td><td>${esc(u.empId)}</td><td>${esc(u.email)}</td><td>${esc(u.phone)}</td><td>${esc(u.position)}</td><td>${esc(bName(u.branchId))}</td><td>${u.zoneId ? esc(zName(u.zoneId)) : "-"}</td>
       <td>${ROLE_LABEL[u.role] || "พนักงาน"}</td>
       <td>${u.active === false ? `<span class="tag off">ระงับ</span>` : u.mustChangePassword ? `<span class="tag warn">ยังไม่เข้าครั้งแรก</span>` : `<span class="tag in">ใช้งาน</span>`}</td>
-      <td>${u.deviceId ? "ผูกแล้ว" : "-"}</td>
+      <td>${(u.deviceIds && u.deviceIds.length) ? `ผูก ${u.deviceIds.length} ที่` : u.deviceId ? "ผูก 1 ที่" : "-"}</td>
       <td class="actions">
         <button class="btn sm" data-uedit="${u.uid}">แก้ไข</button>
         <button class="btn sm" data-ureset="${u.uid}">รีเซ็ตเครื่อง</button>
@@ -205,7 +208,7 @@ async function createAuthUser(email, pw) {
 }
 async function addUser(d, pw) {
   const uid = await createAuthUser(d.email, pw);
-  await setDoc(doc(db, "users", uid), { ...d, active: true, mustChangePassword: true, deviceId: "", createdAt: serverTimestamp() });
+  await setDoc(doc(db, "users", uid), { ...d, active: true, mustChangePassword: true, deviceId: "", deviceIds: [], createdAt: serverTimestamp() });
 }
 function resetUserForm() {
   editingUid = null;
@@ -279,7 +282,7 @@ $("tUsers").addEventListener("click", async (e) => {
       $("uFormTitle").scrollIntoView({ behavior: "smooth" });
     } else if (t.ureset) {
       if (!confirm(`รีเซ็ตเครื่องของ ${u.name}? เครื่องถัดไปที่เข้าใช้งาน (มือถือ) จะถูกผูกอัตโนมัติ`)) return;
-      await updateDoc(doc(db, "users", u.uid), { deviceId: "" }); loadUsers();
+      await updateDoc(doc(db, "users", u.uid), { deviceId: "", deviceIds: [] }); loadUsers();
     } else if (t.upw) {
       await sendPasswordResetEmail(auth, u.email); alert(`ส่งลิงก์ตั้งรหัสผ่านใหม่ไปที่ ${u.email} แล้ว`);
     } else if (t.uact) {
@@ -303,7 +306,7 @@ async function loadDevices() {
     $("tDev").onclick = async (e) => {
       const ok = e.target.dataset.ok, no = e.target.dataset.no;
       try {
-        if (ok) { const r = reqs.find((x) => x.uid === ok); await updateDoc(doc(db, "users", ok), { deviceId: r.deviceId }); await deleteDoc(doc(db, "deviceRequests", ok)); }
+        if (ok) { const r = reqs.find((x) => x.uid === ok); await updateDoc(doc(db, "users", ok), { deviceId: r.deviceId, deviceIds: [r.deviceId] }); await deleteDoc(doc(db, "deviceRequests", ok)); }
         if (no) await deleteDoc(doc(db, "deviceRequests", no));
         if (ok || no) { loadDevices(); loadUsers(); }
       } catch (err) { alert(errText(err)); }
@@ -422,10 +425,12 @@ $("btnPurge").onclick = async () => {
       // AM: ลบเฉพาะรูปของเช็กอินในเขตตัวเอง
       const old = (await getDocs(query(collection(db, "checkins"), where("zoneId", "==", me.zoneId)))).docs
         .filter((d) => d.data().ts && d.data().ts.toMillis() < cutoff.toMillis() && d.data().hasPhoto !== false);
-      for (let i = 0; i < old.length; i += 400) {
+      // Rules ต้อง get() รายการเช็กอินทุกรูป (จำกัด 20 ครั้ง/คำสั่ง) → ลบครั้งละ 8 รูป
+      const AM_CHUNK = 8;
+      for (let i = 0; i < old.length; i += AM_CHUNK) {
         const batch = writeBatch(db);
-        old.slice(i, i + 400).forEach((d) => { batch.delete(doc(db, "checkinPhotos", d.id)); batch.update(d.ref, { hasPhoto: false }); });
-        await batch.commit(); total += Math.min(400, old.length - i);
+        old.slice(i, i + AM_CHUNK).forEach((d) => { batch.delete(doc(db, "checkinPhotos", d.id)); batch.update(d.ref, { hasPhoto: false }); });
+        await batch.commit(); total += Math.min(AM_CHUNK, old.length - i);
         msg("pMsg", `ลบแล้ว ${total} รูป...`, "ok");
       }
       msg("pMsg", `เสร็จแล้ว ลบรูปทั้งหมด ${total} รูป (เฉพาะเขต ${zName(me.zoneId)})`, "ok");
