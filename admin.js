@@ -188,7 +188,7 @@ async function loadUsers() {
     users.map((u) => `<tr>
       <td>${esc(u.name)}</td><td>${esc(u.nickname)}</td><td>${esc(u.empId)}</td><td>${esc(u.email)}</td><td>${esc(u.phone)}</td><td>${esc(u.position)}</td><td>${esc(bName(u.branchId))}</td><td>${u.zoneId ? esc(zName(u.zoneId)) : "-"}</td>
       <td>${ROLE_LABEL[u.role] || "พนักงาน"}</td>
-      <td>${u.active === false ? `<span class="tag off">ระงับ</span>` : u.mustChangePassword ? `<span class="tag warn">ยังไม่เข้าครั้งแรก</span>` : `<span class="tag in">ใช้งาน</span>`}</td>
+      <td>${u.movedTo ? `<span class="tag off">ย้ายไป ${esc(u.movedToEmail || "บัญชีใหม่")}</span>` : u.active === false ? `<span class="tag off">ระงับ</span>` : u.mustChangePassword ? `<span class="tag warn">ยังไม่เข้าครั้งแรก</span>` : `<span class="tag in">ใช้งาน</span>`}</td>
       <td>${(u.deviceIds && u.deviceIds.length) ? `ผูก ${u.deviceIds.length} ที่` : u.deviceId ? "ผูก 1 ที่" : "-"}</td>
       <td class="actions">
         <button class="btn sm" data-uedit="${u.uid}">แก้ไข</button>
@@ -213,7 +213,7 @@ async function addUser(d, pw) {
 function resetUserForm() {
   editingUid = null;
   ["uName", "uEmp", "uEmail", "uPw", "uPos", "uPhone", "uNick"].forEach((i) => ($(i).value = ""));
-  $("uEmail").disabled = false; $("uPw").disabled = false; $("uRole").value = "staff"; $("uBranch").value = ""; $("uZone").value = "";
+  $("uEmail").disabled = false; $("uPw").disabled = false; $("uPw").placeholder = "อย่างน้อย 6 ตัว"; $("uRole").value = "staff"; $("uBranch").value = ""; $("uZone").value = "";
   $("uFormTitle").textContent = "เพิ่มพนักงาน"; $("btnUSave").textContent = "เพิ่มพนักงาน"; $("btnUCancel").classList.add("hidden");
 }
 $("btnUCancel").onclick = resetUserForm;
@@ -231,9 +231,22 @@ $("btnUSave").onclick = async () => {
   busy($("btnUSave"), true);
   try {
     if (editingUid) {
+      const old = users.find((x) => x.uid === editingUid) || {};
       const { email, ...rest } = d;
-      await updateDoc(doc(db, "users", editingUid), rest);
-      msg("uMsg", "บันทึกการแก้ไขแล้ว", "ok");
+      if (email && email !== String(old.email || "").toLowerCase()) {
+        // เปลี่ยนอีเมล = สร้างบัญชีใหม่ (Firebase แบบฟรีเปลี่ยนอีเมลล็อกอินของคนอื่นไม่ได้) แล้วระงับบัญชีเดิม
+        const pw = $("uPw").value.trim();
+        if (pw.length < 6) throw { message: "เปลี่ยนอีเมลต้องตั้งรหัสผ่านเริ่มต้นใหม่ในช่องรหัสผ่าน (อย่างน้อย 6 ตัว)" };
+        if (users.some((x) => String(x.email || "").toLowerCase() === email)) throw { message: "อีเมลนี้มีบัญชีอยู่แล้ว" };
+        if (!confirm(`เปลี่ยนอีเมลของ ${d.name}\n${old.email} → ${email}\n\nระบบจะสร้างบัญชีใหม่ และระงับบัญชีเดิม (ประวัติเช็กอินเดิมยังอยู่ รายงานกะรวมให้ด้วยเบอร์โทร)\nพนักงานต้องล็อกอินด้วยอีเมลใหม่และผูกมือถือใหม่`)) return;
+        const uid = await createAuthUser(email, pw);
+        await setDoc(doc(db, "users", uid), { ...rest, email, active: true, mustChangePassword: true, deviceId: "", deviceIds: [], movedFrom: editingUid, createdAt: serverTimestamp() });
+        await updateDoc(doc(db, "users", editingUid), { active: false, movedTo: uid, movedToEmail: email });
+        msg("uMsg", `เปลี่ยนอีเมลแล้ว — แจ้งพนักงาน: อีเมล ${email} / รหัสผ่านเริ่มต้น ${pw}`, "ok");
+      } else {
+        await updateDoc(doc(db, "users", editingUid), rest);
+        msg("uMsg", "บันทึกการแก้ไขแล้ว", "ok");
+      }
     } else {
       const pw = $("uPw").value.trim();
       if (!d.email) throw { message: "กรอกอีเมล" };
@@ -275,8 +288,8 @@ $("tUsers").addEventListener("click", async (e) => {
   try {
     if (t.uedit) {
       editingUid = u.uid;
-      $("uName").value = u.name || ""; $("uEmp").value = u.empId || ""; $("uEmail").value = u.email || ""; $("uEmail").disabled = true;
-      $("uPw").value = ""; $("uPw").disabled = true; $("uPos").value = u.position || "";
+      $("uName").value = u.name || ""; $("uEmp").value = u.empId || ""; $("uEmail").value = u.email || ""; $("uEmail").disabled = false;
+      $("uPw").value = ""; $("uPw").disabled = false; $("uPw").placeholder = "ใส่เฉพาะเมื่อเปลี่ยนอีเมล (อย่างน้อย 6 ตัว)"; $("uPos").value = u.position || "";
       $("uPhone").value = u.phone || ""; $("uNick").value = u.nickname || ""; $("uBranch").value = u.branchId || ""; $("uRole").value = u.role === "admin" ? "rm" : u.role || "staff"; $("uZone").value = u.zoneId || "";
       $("uFormTitle").textContent = "แก้ไข: " + u.name; $("btnUSave").textContent = "บันทึกการแก้ไข"; $("btnUCancel").classList.remove("hidden");
       $("uFormTitle").scrollIntoView({ behavior: "smooth" });
@@ -367,7 +380,8 @@ function renderReport() {
     <div class="stat"><span class="muted">เข้างาน</span><b>${rows.filter((r) => r.type === "in").length}</b></div>
     <div class="stat"><span class="muted">ออกงาน</span><b>${rows.filter((r) => r.type === "out").length}</b></div>
     <div class="stat"><span class="muted">ยังไม่ลงออกงาน (คน-วัน)</span><b>${noOut}</b></div>
-    <div class="stat"><span class="muted">นอกสถานที่ (รอตรวจ)</span><b>${rows.filter((r) => r.offsite && !r.reviewed).length}</b></div>`;
+    <div class="stat"><span class="muted">นอกสถานที่ (รอตรวจ)</span><b>${rows.filter((r) => r.offsite && !r.reviewed).length}</b></div>
+    <div class="stat"><span class="muted">แจ้งเปลี่ยนกะ/วันหยุด (รอตรวจ)</span><b>${rows.filter((r) => r.change && !r.reviewed).length}</b></div>`;
   $("tSum").innerHTML = `<tr><th>วันที่</th><th>ชื่อ</th><th>รหัส</th><th>สาขา</th><th>เข้างาน</th><th>ออกงาน</th><th>ชั่วโมง</th></tr>` +
     (sum.map((s) => `<tr><td>${s.day}</td><td>${esc(s.name)}</td><td>${esc(s.empId)}</td><td>${esc(s.branches)}</td>
       <td>${s.firstIn ? fmtTime(s.firstIn) : `<span class="tag warn">ไม่มี</span>`}</td>
@@ -378,9 +392,9 @@ function renderReport() {
       <td>${r.photo ? `<img class="thumb" loading="lazy" src="${r.photo}" data-cap="${esc(r.name)} · ${esc(r.gesture)} · ${esc(fmtDateTime(r.t))}">`
         : r.hasPhoto ? `<button class="btn sm" data-pid="${r.id}" data-cap="${esc(r.name)} · ท่า: ${esc(r.gesture)} · ${esc(fmtDateTime(r.t))}">📷 ดูรูป</button>` : `<span class="muted">-</span>`}</td>
       <td>${fmtDateTime(r.t)}</td><td>${esc(r.name)}</td>
-      <td><span class="tag ${r.type}">${r.type === "in" ? "เข้างาน" : "ออกงาน"}</span>${r.offsite ? ` <span class="tag offsite">นอกสถานที่</span>` : ""}</td>
+      <td><span class="tag ${r.type}">${r.type === "in" ? "เข้างาน" : "ออกงาน"}</span>${r.offsite ? ` <span class="tag offsite">นอกสถานที่</span>` : ""}${r.change ? ` <span class="tag warn">${esc(r.change)}</span>` : ""}</td>
       <td>${esc(r.branchName)}</td><td>${r.distance != null ? fmtDistM(r.distance) : "-"} (±${r.accuracy ?? "-"})</td><td>${esc(r.gesture)}</td>
-      <td class="wrap-txt">${esc(r.note || "")}${r.offsite ? (r.reviewed ? ` <span class="tag in">ตรวจแล้ว</span>` : ` <button class="btn sm" data-review="${r.id}">✓ ตรวจแล้ว</button>`) : ""}</td>
+      <td class="wrap-txt">${esc(r.note || "")}${(r.offsite || r.change) ? (r.reviewed ? ` <span class="tag in">ตรวจแล้ว</span>` : ` <button class="btn sm" data-review="${r.id}">✓ ตรวจแล้ว</button>`) : ""}</td>
       <td><a href="https://www.google.com/maps?q=${r.lat},${r.lng}" target="_blank" rel="noopener">ดู</a></td></tr>`).join("") || `<tr><td class="muted" colspan="9">ไม่มีข้อมูล</td></tr>`);
 }
 const fmtDistM = (m) => (m >= 1000 ? (m / 1000).toFixed(1) + " กม." : m + " ม.");
@@ -408,8 +422,8 @@ $("btnCsvSum").onclick = () => {
 };
 $("btnCsvRaw").onclick = () => {
   downloadCsv(`${bkkDay()}_รายการเข้าออกงาน_${$("rFrom").value}_${$("rTo").value}.csv`,
-    ["วันที่", "เวลา", "ชื่อ", "รหัสพนักงาน", "ประเภท", "รหัสสาขา", "สาขา", "ระยะจากสาขา(ม.)", "ความแม่นยำ GPS(ม.)", "ท่า", "นอกสถานที่", "หมายเหตุ", "lat", "lng"],
-    filtered().slice().reverse().map((r) => [r.day, fmtTime(r.t), r.name, r.empId, r.type === "in" ? "เข้างาน" : "ออกงาน", r.branchId, r.branchName, r.distance, r.accuracy, r.gesture, r.offsite ? "ใช่" : "", r.note || "", r.lat, r.lng]));
+    ["วันที่", "เวลา", "ชื่อ", "รหัสพนักงาน", "ประเภท", "รหัสสาขา", "สาขา", "ระยะจากสาขา(ม.)", "ความแม่นยำ GPS(ม.)", "ท่า", "นอกสถานที่", "แจ้งเปลี่ยนจากตารางกะ", "หมายเหตุ", "AM ตรวจแล้ว", "lat", "lng"],
+    filtered().slice().reverse().map((r) => [r.day, fmtTime(r.t), r.name, r.empId, r.type === "in" ? "เข้างาน" : "ออกงาน", r.branchId, r.branchName, r.distance, r.accuracy, r.gesture, r.offsite ? "ใช่" : "", r.change || "", r.note || "", (r.offsite || r.change) ? (r.reviewed ? "ใช่" : "ยัง") : "", r.lat, r.lng]));
 };
 
 /* ================= ลบรูปเก่า ================= */
@@ -562,12 +576,15 @@ async function runAtt() {
       fetchCheckins(start, end)
     ]);
     if (shSnap.empty) { att = { sums: [], days: [] }; renderAtt(); return msg("aMsg", `ยังไม่มีตารางกะเดือน ${month} — อัปโหลดไฟล์ที่ด้านล่าง`); }
-    const uidByPhone = new Map(users.filter((u) => u.phoneKey).map((u) => [u.phoneKey, u.uid]));
+    // เบอร์เดียวกันอาจมีหลายบัญชี (เปลี่ยนอีเมล → บัญชีใหม่) : รวมประวัติทุกบัญชี
+    const uidsByPhone = new Map();
+    users.filter((u) => u.phoneKey).sort((a, b) => (a.active === false) - (b.active === false))
+      .forEach((u) => (uidsByPhone.get(u.phoneKey) || uidsByPhone.set(u.phoneKey, []).get(u.phoneKey)).push(u.uid));
     const byUid = new Map();
     ckRows.forEach((r) => { (byUid.get(r.uid) || byUid.set(r.uid, []).get(r.uid)).push(r); });
     const now = new Date(), sums = [], days = [];
     for (const sd of shSnap.docs) {
-      const s = sd.data(), uid = uidByPhone.get(s.phoneKey), list = uid ? byUid.get(uid) || [] : [];
+      const s = sd.data(), uids = uidsByPhone.get(s.phoneKey) || [], uid = uids[0], list = uids.flatMap((x) => byUid.get(x) || []);
       const sum = { name: s.name, nickname: s.nickname, branchId: s.branchId, zoneId: s.zoneId || bZoneOf(s.branchId), store: s.store, phone: s.phone, hasAccount: !!uid,
         work: 0, present: 0, offsite: 0, late: 0, lateMin: 0, early: 0, earlyMin: 0, absent: 0, noOut: 0, off: 0, leave: 0, offWork: 0 };
       for (const day of Object.keys(s.days || {}).sort()) {
@@ -576,12 +593,14 @@ async function runAtt() {
         const dayRecs = list.filter((c) => c.day === day);
         const dayIns = dayRecs.filter((c) => c.type === "in").map((c) => c.t).sort((a, b) => a - b);
         const offRecs = dayRecs.filter((c) => c.offsite);
+        const chRecs = dayRecs.filter((c) => c.change);
+        const chTxt = chRecs.map((c) => `แจ้ง${c.change}${c.note ? ": " + c.note : ""}${c.reviewed ? " (AM ตรวจแล้ว)" : " (รอ AM ตรวจ)"}`).join(" / ");
         const row = { day, name: s.name, nickname: s.nickname, store: s.store, branchId: s.branchId, zoneId: sum.zoneId, code, sched: "", in: dayIns[0] || null, out: null, status: "", kind: "" , issue: false };
-        if (!info) { row.status = "รหัสกะไม่รู้จัก"; row.kind = "warn"; row.issue = true; }
+        if (!info) { row.status = "รหัสกะไม่รู้จัก" + (chRecs.length ? " · " + chTxt : ""); row.kind = "warn"; row.issue = true; }
         else if (info.off) {
           if (info.off === "วันหยุด") sum.off++; else sum.leave++;
           row.status = info.off;
-          if (dayIns.length) { row.status += " (แต่มีเช็กอิน)"; row.kind = "warn"; row.issue = true; sum.offWork++; }
+          if (dayIns.length) { row.status += chRecs.length ? " · " + chTxt : " (แต่มีเช็กอิน)"; row.kind = "warn"; row.issue = true; sum.offWork++; }
         } else {
           const w = shiftWindow(day, info);
           row.sched = `${info.s}–${info.e}`;
@@ -602,6 +621,7 @@ async function runAtt() {
               if (row.out) { const early = Math.round((w.e - row.out) / 60000); if (early > 0) { parts.push(`ออกก่อน ${early} นาที`); sum.early++; sum.earlyMin += early; } }
               else if (now > limit) { parts.push("ไม่ลงออกงาน"); sum.noOut++; }
               if (offRecs.length) { sum.offsite++; parts.push("นอกสถานที่: " + offRecs.map((c) => c.note).filter(Boolean).join(" / ")); }
+              if (chRecs.length) parts.push(chTxt);
               row.status = parts.join(" · ") || "ปกติ"; row.kind = offRecs.length ? "offsite" : parts.length ? "warn" : "in"; row.issue = parts.length > 0;
             }
           }

@@ -65,8 +65,10 @@
       <label>สาขา<select id="mBranch"></select></label>
       <div id="locBox" class="loc wait">📍 กำลังหาตำแหน่ง...</div>
       <label class="chk"><input type="checkbox" id="mOff"> ทำงานนอกสถานที่ (ไม่ได้อยู่ที่สาขา)</label>
+      <label>เปลี่ยนแปลงจากตารางกะ
+        <select id="mChange"><option value="">ไม่มี — ทำงานตามตารางกะ</option><option value="สลับวันหยุด">สลับวันหยุด / มาทำงานวันหยุด</option><option value="เปลี่ยนเวลาเข้างาน">เปลี่ยนเวลาเข้างาน / สลับกะ</option></select></label>
       <label>หมายเหตุ <span id="noteReq">(ไม่บังคับ)</span>
-        <textarea id="mNote" maxlength="300" style="min-height:64px" placeholder="เช่น ประชุมที่ HUB บางนา / ดูงานอีเวนต์ที่... / ลืมกดออกงาน ออกจริง 17:10"></textarea></label>
+        <textarea id="mNote" maxlength="300" style="min-height:64px" placeholder="เช่น สลับวันหยุดกับวันที่ 25 (AM อนุมัติแล้ว) / เปลี่ยนเป็นกะ 12:00 แทนเพื่อน / ประชุมที่ HUB"></textarea></label>
     </div>
 
     <div class="card">

@@ -176,11 +176,14 @@ function startGeo() {
   );
 }
 const isOff = () => $("mOff").checked;
+const chg = () => $("mChange").value;
+const needNote = () => isOff() || !!chg();
 const noteText = () => $("mNote").value.trim();
 function updateLoc() {
   const b = curBranch(), off = isOff();
-  $("noteReq").textContent = off ? "(จำเป็น — ระบุสถานที่/เหตุผล อย่างน้อย 5 ตัวอักษร)" : "(ไม่บังคับ)";
-  $("noteReq").className = off ? "msg err" : "";
+  const req = needNote();
+  $("noteReq").textContent = off ? "(จำเป็น — ระบุสถานที่/เหตุผล อย่างน้อย 5 ตัวอักษร)" : req ? "(จำเป็น — ระบุว่าเปลี่ยนเป็นอย่างไร อย่างน้อย 5 ตัวอักษร)" : "(ไม่บังคับ)";
+  $("noteReq").className = req ? "msg err" : "";
   if (!b) { inRange = false; setLoc("bad", "✗ ยังไม่ได้เลือกสาขา"); return refresh(); }
   if (!pos) return refresh();
   dist = haversine(pos.latitude, pos.longitude, b.lat, b.lng);
@@ -192,6 +195,7 @@ function updateLoc() {
   refresh();
 }
 $("mOff").addEventListener("change", updateLoc);
+$("mChange").addEventListener("change", updateLoc);
 $("mNote").addEventListener("input", refresh);
 
 /* ---------- กล้อง ---------- */
@@ -249,14 +253,15 @@ document.addEventListener("visibilitychange", () => { if (document.hidden && str
 function refresh() {
   const btn = $("btnSubmit");
   btn.textContent = "ยืนยัน" + (type === "in" ? "เข้างาน" : "ออกงาน");
-  const placeOk = isOff() ? noteText().length >= 5 : inRange;
-  btn.textContent += isOff() ? " (นอกสถานที่)" : "";
-  btn.disabled = !(placeOk && photo && pos);
+  const placeOk = isOff() || inRange;
+  const noteOk = !needNote() || noteText().length >= 5;
+  btn.textContent += isOff() ? " (นอกสถานที่)" : chg() ? ` (${chg()})` : "";
+  btn.disabled = !(placeOk && noteOk && photo && pos);
 }
 $("btnSubmit").onclick = async () => {
   const b = curBranch();
-  const off = isOff(), note = noteText();
-  if (!(photo && pos && b && (off ? note.length >= 5 : inRange))) return;
+  const off = isOff(), note = noteText(), change = chg();
+  if (!(photo && pos && b && (off || inRange) && (!needNote() || note.length >= 5))) return;
   busy($("btnSubmit"), true, "กำลังบันทึก...");
   msg("mMsg", "");
   try {
@@ -268,13 +273,13 @@ $("btnSubmit").onclick = async () => {
       branchId: b.id, branchName: b.name || "", zoneId: b.zoneId || "", zm: `${b.zoneId || ""}_${bkkDay().slice(0, 7)}`, type, shiftCode: todayCode || "",
       ts: serverTimestamp(), day: bkkDay(),
       lat: pos.latitude, lng: pos.longitude, accuracy: Math.round(pos.accuracy), distance: Math.round(dist),
-      gesture: gesture.text, hasPhoto: true, offsite: off, note, deviceId, ua: navigator.userAgent.slice(0, 300)
+      gesture: gesture.text, hasPhoto: true, offsite: off, change, note, deviceId, ua: navigator.userAgent.slice(0, 300)
     });
     await batch.commit();
     const s = await getDoc(ref);
     const t = s.data().ts && s.data().ts.toDate();
-    $("doneText").innerHTML = `${type === "in" ? "เข้างาน" : "ออกงาน"} · ${off ? "นอกสถานที่" : esc(b.name)}<br>เวลา ${fmtTime(t)} น.`;
-    $("mNote").value = ""; $("mOff").checked = false; updateLoc();
+    $("doneText").innerHTML = `${type === "in" ? "เข้างาน" : "ออกงาน"} · ${off ? "นอกสถานที่" : esc(b.name)}${change ? `<br>แจ้ง: ${esc(change)} (รอ AM ตรวจ)` : ""}<br>เวลา ${fmtTime(t)} น.`;
+    $("mNote").value = ""; $("mOff").checked = false; $("mChange").value = ""; updateLoc();
     $("done").classList.remove("hidden");
     resetPhoto();
     loadToday();
@@ -289,7 +294,7 @@ async function loadToday() {
     const rows = (await getDocs(q)).docs.map((d) => d.data())
       .sort((a, b) => (a.ts ? a.ts.toMillis() : 0) - (b.ts ? b.ts.toMillis() : 0));
     $("today").innerHTML = rows.length
-      ? rows.map((r) => `<li><span><span class="tag ${r.type}">${r.type === "in" ? "เข้างาน" : "ออกงาน"}</span> ${r.offsite ? `<span class="tag offsite">นอกสถานที่</span>` : esc(r.branchName)}</span><b>${fmtTime(r.ts && r.ts.toDate())}</b></li>`).join("")
+      ? rows.map((r) => `<li><span><span class="tag ${r.type}">${r.type === "in" ? "เข้างาน" : "ออกงาน"}</span> ${r.offsite ? `<span class="tag offsite">นอกสถานที่</span>` : esc(r.branchName)}${r.change ? ` <span class="tag warn">${esc(r.change)}</span>` : ""}</span><b>${fmtTime(r.ts && r.ts.toDate())}</b></li>`).join("")
       : `<li class="muted">ยังไม่มีรายการ</li>`;
   } catch (e) { /* แสดงต่อได้แม้โหลดประวัติไม่สำเร็จ */ }
 }
